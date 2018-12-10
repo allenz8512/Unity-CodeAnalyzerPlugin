@@ -8,7 +8,6 @@ namespace Unity.MSBuild
     public class UnitySolution
     {
 
-        public UnityCSProject AssemblyCSharp;
         public UnityCSProject AssemblyCSharpEditor;
 
         public string SlnFile;
@@ -53,24 +52,14 @@ namespace Unity.MSBuild
                 return null;
             }
 
-
-            var csprojPath = Path.Combine(dirinfo.FullName, dirinfo.Name + ".csproj");
             var csprojPathEditor = Path.Combine(dirinfo.FullName, dirinfo.Name + ".Editor.csproj");
 
             if (!isvs)
             {
-                csprojPath = Path.Combine(dirinfo.FullName, "Assembly-CSharp.csproj");
                 csprojPathEditor = Path.Combine(dirinfo.FullName, "Assembly-CSharp-Editor.csproj");
 
             }
 
-
-
-            if (!File.Exists(csprojPath))
-            {
-                UnityEngine.Debug.LogError("Missing " + csprojPath);
-                
-            }
             if (!File.Exists(csprojPathEditor))
             {
                 UnityEngine.Debug.LogError("Missing " + csprojPathEditor);
@@ -78,7 +67,6 @@ namespace Unity.MSBuild
 
             var solution = new UnitySolution();
 
-            solution.AssemblyCSharp = UnityCSProject.Parse(csprojPath);
             solution.AssemblyCSharpEditor = UnityCSProject.Parse(csprojPathEditor);
 
             return solution;

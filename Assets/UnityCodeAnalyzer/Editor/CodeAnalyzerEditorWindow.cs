@@ -5,22 +5,20 @@ using UnityEngine;
 using UnityEditor;
 using System.IO;
 using System;
-
 using Unity.MSBuild;
+using UnityEditor.Compilation;
 
 namespace Unity.CodeAnalysis
 {
-
     public class CodeAnalyzerEditorWindow : EditorWindow
     {
-
         private static CodeAnalyzerEditorWindow s_window;
-        private static string CODE_ANALYZER_DLLPATH_ASSEMBLY = "unity.codeanalyzer.dllpath.assembly";
         private static string CODE_ANALYZER_DLLPATH_ASSEMBLY_EDITOR = "unity.codeanalyzer.dllpath.assemblyeditor";
+        private static string CODE_ANALYZER_CSHARP_DLLPATH_ASSEMBLY_EDITOR = "unity.codeanalyzer.csharp.dllpath.assemblyeditor";
         private static string CODE_ANALYZER_ENABLED = "unity.codeanalyzer.enabled";
 
-        private static string s_dllpath_assembly;
         private static string s_dllpath_assemblyeditor;
+        private static string s_csharp_dllpath_assemblyeditor;
         private static bool? s_enabled;
 
         [MenuItem("CodeAnalysis/Refresh")]
@@ -29,30 +27,30 @@ namespace Unity.CodeAnalysis
             var projectPath = Application.dataPath.Substring(0, Application.dataPath.Length - 6);
             var solution = UnitySolution.Parse(projectPath);
 
-            var projAsm = solution.AssemblyCSharp;
-            if (projAsm != null)
-            {
-                if (projAsm.AnalyzerItems == null || projAsm.AnalyzerItems.Count() == 0)
-                {
-                    var path = PlayerPrefs.GetString(CODE_ANALYZER_DLLPATH_ASSEMBLY);
-                    if (!string.IsNullOrEmpty(path) && (File.Exists(path) || File.Exists(Path.Combine(Application.dataPath, path))))
-                    {
-                        projAsm.AddAnalyzer(new AnalyzerItem(path));
-                        projAsm.WriteToFile();
-                    }
-                }
-            }
-
             var projEditor = solution.AssemblyCSharpEditor;
             if (projEditor != null)
             {
-                if (projEditor.AssemblyName == null || projEditor.AnalyzerItems.Count() == 0)
+                if (projEditor.AnalyzerItems.Count() == 0)
                 {
+                    bool modified = false;
                     var path = PlayerPrefs.GetString(CODE_ANALYZER_DLLPATH_ASSEMBLY_EDITOR);
-                    if (!string.IsNullOrEmpty(path) && (File.Exists(path) || File.Exists(Path.Combine(Application.dataPath, path))))
+                    if (!string.IsNullOrEmpty(path) &&
+                        (File.Exists(path) || File.Exists(Path.Combine(Application.dataPath, path))))
                     {
                         projEditor.AddAnalyzer(new AnalyzerItem(path));
+                        modified = true;
+                    }
+                    path = PlayerPrefs.GetString(CODE_ANALYZER_CSHARP_DLLPATH_ASSEMBLY_EDITOR);
+                    if (!string.IsNullOrEmpty(path) &&
+                        (File.Exists(path) || File.Exists(Path.Combine(Application.dataPath, path))))
+                    {
+                        projEditor.AddAnalyzer(new AnalyzerItem(path));
+                        modified = true;
+                    }
+                    if (modified)
+                    {
                         projEditor.WriteToFile();
+//                        Debug.Log("Roslyn has been added to Editor.");
                     }
                 }
             }
@@ -60,8 +58,10 @@ namespace Unity.CodeAnalysis
 
         private void CheckParameters()
         {
-            if (string.IsNullOrEmpty(s_dllpath_assembly)) s_dllpath_assembly = PlayerPrefs.GetString(CODE_ANALYZER_DLLPATH_ASSEMBLY);
-            if (string.IsNullOrEmpty(s_dllpath_assemblyeditor)) s_dllpath_assemblyeditor = PlayerPrefs.GetString(CODE_ANALYZER_DLLPATH_ASSEMBLY_EDITOR);
+            if (string.IsNullOrEmpty(s_dllpath_assemblyeditor))
+                s_dllpath_assemblyeditor = PlayerPrefs.GetString(CODE_ANALYZER_DLLPATH_ASSEMBLY_EDITOR);
+            if (string.IsNullOrEmpty(s_csharp_dllpath_assemblyeditor))
+                s_csharp_dllpath_assemblyeditor = PlayerPrefs.GetString(CODE_ANALYZER_CSHARP_DLLPATH_ASSEMBLY_EDITOR);
             if (s_enabled == null) s_enabled = PlayerPrefs.GetInt(CODE_ANALYZER_ENABLED, 0) == 1;
         }
 
@@ -84,29 +84,13 @@ namespace Unity.CodeAnalysis
             }
 
             GUI.enabled = false;
-            s_dllpath_assembly = EditorGUILayout.TextField("AnalyzerAssembly", s_dllpath_assembly);
-            GUI.enabled = true;
-
-            if (GUILayout.Button("Select"))
-            {
-                var filePath = EditorUtility.OpenFilePanelWithFilters("Select Analyzer dll", Application.dataPath, new string[] { "analyzer", "dll" });
-
-                if (!string.IsNullOrEmpty(filePath))
-                {
-                    var analyzerPath = GetRelativePath(Application.dataPath, filePath);
-                    s_dllpath_assembly = analyzerPath;
-                    PlayerPrefs.SetString(CODE_ANALYZER_DLLPATH_ASSEMBLY, s_dllpath_assembly);
-                }
-
-            }
-
-            GUI.enabled = false;
             s_dllpath_assemblyeditor = EditorGUILayout.TextField("AnalyzerEditor", s_dllpath_assemblyeditor);
             GUI.enabled = true;
 
             if (GUILayout.Button("Select"))
             {
-                var filePath = EditorUtility.OpenFilePanelWithFilters("Select Analyzer dll", Application.dataPath, new string[] { "analyzer", "dll" });
+                var filePath = EditorUtility.OpenFilePanelWithFilters("Select Analyzer dll", Application.dataPath,
+                    new string[] {"analyzer", "dll"});
                 if (!string.IsNullOrEmpty(filePath))
                 {
                     var analyzerPath = GetRelativePath(Application.dataPath, filePath);
@@ -114,17 +98,53 @@ namespace Unity.CodeAnalysis
                     PlayerPrefs.SetString(CODE_ANALYZER_DLLPATH_ASSEMBLY_EDITOR, s_dllpath_assemblyeditor);
                 }
             }
+
+            GUI.enabled = false;
+            s_csharp_dllpath_assemblyeditor = EditorGUILayout.TextField("AnalyzerCSharpEditor", s_csharp_dllpath_assemblyeditor);
+            GUI.enabled = true;
+
+            if (GUILayout.Button("Select"))
+            {
+                var filePath = EditorUtility.OpenFilePanelWithFilters("Select Analyzer CSharp dll", Application.dataPath,
+                    new string[] { "analyzer", "dll" });
+
+                if (!string.IsNullOrEmpty(filePath))
+                {
+                    var analyzerPath = GetRelativePath(Application.dataPath, filePath);
+                    s_csharp_dllpath_assemblyeditor = analyzerPath;
+                    PlayerPrefs.SetString(CODE_ANALYZER_CSHARP_DLLPATH_ASSEMBLY_EDITOR, s_csharp_dllpath_assemblyeditor);
+                }
+            }
         }
 
         public static string GetRelativePath(string folder, string file)
         {
-            return Uri.UnescapeDataString(new Uri(folder).MakeRelativeUri(new Uri(file)).ToString().Replace('/', Path.DirectorySeparatorChar));
+            return Uri.UnescapeDataString(new Uri(folder).MakeRelativeUri(new Uri(file)).ToString()
+                .Replace('/', Path.DirectorySeparatorChar));
         }
     }
 
+#if UNITY_2017_3_OR_NEWER
+    [InitializeOnLoad]
+    public static class UnityCSProjectCompilationCallback
+    {
+        static UnityCSProjectCompilationCallback()
+        {
+            CompilationPipeline.assemblyCompilationFinished -= OnCompilationFinished;
+            CompilationPipeline.assemblyCompilationFinished += OnCompilationFinished;
+        }
+
+        private static void OnCompilationFinished(string assemblyPath, CompilerMessage[] compilerMessages)
+        {
+            CodeAnalyzerEditorWindow.OnCSProjectModified();
+        }
+    }
+}
+#else
     class UnityCSProjectAnalyzerPostprocessor : AssetPostprocessor
     {
-        private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
+        private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets,
+            string[] movedAssets, string[] movedFromAssetPaths)
         {
             if (importedAssets.Any(asset => asset.ToLower().EndsWith(".cs")) ||
                 deletedAssets.Any(asset => asset.ToLower().EndsWith(".cs")) ||
@@ -140,5 +160,4 @@ namespace Unity.CodeAnalysis
             CodeAnalyzerEditorWindow.OnCSProjectModified();
         }
     }
-
-}
+#endif
